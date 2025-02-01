@@ -1,4 +1,6 @@
 from itertools import product
+import copy
+import time
 
 # fmt: off
 field = [[[0, 0, 0, 1], 
@@ -9,33 +11,61 @@ field = [[[0, 0, 0, 1],
           [1, 0, 0, 0], 
           [0, 0, 0, 0]]]
 
-block1 = [[[1, 1, 1], 
-           [1, 0, 0]], 
+yellowU = [[[1, 1, 1], 
+            [1, 0, 1]]]
 
-          [[0, 0, 1], 
-           [0, 0, 0]]]
+redSimple = [[[1, 1], 
+              [1, 1]], 
 
-block2 = [[[1, 1, 1], 
-           [1, 0, 1]], 
+             [[1, 0], 
+              [0, 0]]]
 
-          [[0, 0, 0], 
-           [0, 0, 0]]]
+yellowTL = [[[1, 1, 1], 
+             [0, 1, 0]], 
 
-block3 = [[[1, 1], 
-           [1, 1]], 
+            [[1, 0, 0], 
+             [0, 0, 0]]]
 
-          [[1, 0], 
-           [0, 0]]]
+yellowDoubleL = [[[1, 1, 1], 
+                  [1, 0, 0]], 
 
-block4 = [[[1, 1, 1], 
-           [0, 1, 0]], 
+                 [[0, 0, 1], 
+                  [0, 0, 0]]]
 
-          [[1, 0, 0], 
-           [0, 0, 0]]]        
+blueDoubleL = [[[0, 1], 
+                [0, 1],
+                [1, 1]], 
+
+               [[0, 0], 
+                [0, 0],
+                [1, 0]]]
+
+greenDoubleL = [[[1, 1], 
+                 [0, 1],
+                 [0, 1]], 
+
+                [[1, 0], 
+                 [0, 0],
+                 [0, 0]]]
+
+blueSquiggly = [[[1, 0], 
+                 [1, 1],
+                 [0, 1]], 
+
+               [[1, 0], 
+                [0, 0],
+                [0, 0]]]
 # fmt: on
 
-blocks = [block1, block2, block3, block4]
+blocks = [blueDoubleL, greenDoubleL, yellowTL, blueSquiggly]
 
+
+def printObj(object):
+    for layer in object:
+        print("————————")
+        for row in layer:
+            print(row)
+                
 
 def rotateX(object, rotations=1):
     rotations = rotations % 4
@@ -123,11 +153,133 @@ def generateRotations(object):
     return rotations
 
 
-rotated_blocks = [generateRotations(block) for block in blocks]
+def generatePossibleStartCoords(object):
+    layers = len(object)
+    rows = len(object[0])
+    points = len(object[0][0])
 
-all_combinations = product(*rotated_blocks)
+    possibleStartCoords = []
 
-for combination in all_combinations:
-    True
-    # Compute every possible location on the field for each object with the rotational states in
-    #  the current combination
+    for li, layer in enumerate(field):
+        if layers > len(field) - li:
+            break
+
+        for ri, row in enumerate(layer):
+            if rows > len(layer) - ri:
+                break
+
+            for pi, point in enumerate(row):
+                if points > len(row) - pi:
+                    break
+
+                if point == 0:
+                    possibleStartCoords.append([pi, ri, li])
+
+    return possibleStartCoords
+
+
+def verifyPossibleStartCoords(object, startCoords):
+    def isValidPlacement(x, y, z, activeField):
+        for zi, layer in enumerate(object):
+            for yi, row in enumerate(layer):
+                for xi, point in enumerate(row):
+                    activeField[z + zi][y + yi][x + xi] += point
+                    if activeField[z + zi][y + yi][x + xi] > 1:
+                        return False
+        return True
+
+    validStartCoords = []
+
+    for coord in startCoords:
+        x, y, z = coord[0], coord[1], coord[2]
+        activeField = copy.deepcopy(field)
+        if isValidPlacement(x, y, z, activeField):
+            validStartCoords.append(coord)
+
+    return validStartCoords
+
+
+def placeObject(activeField, object, x, y, z):
+    for zi, layer in enumerate(object):
+        for yi, row in enumerate(layer):
+            for xi, point in enumerate(row):
+                activeField[z + zi][y + yi][x + xi] += point
+                if activeField[z + zi][y + yi][x + xi] > 1:
+                    return False
+    return True
+
+
+rotatedBlocks = [generateRotations(block) for block in blocks]
+
+allCombinations = product(*rotatedBlocks)
+
+success = False
+itercount = 0
+lastFourFieldStatesBase = [copy.deepcopy(field)]
+
+for combination in allCombinations:
+    allCoords = [[], [], [], []]
+
+    for i, object in enumerate(combination):
+        startCoords = generatePossibleStartCoords(object)
+        verifiedCoords = verifyPossibleStartCoords(object, startCoords)
+        allCoords[i].extend(verifiedCoords)
+
+    for coordCombination in product(*allCoords):
+        coordCombList = list(coordCombination)
+
+        activeField = copy.deepcopy(field)
+        lastFourFieldStates = copy.deepcopy(lastFourFieldStatesBase)
+
+        for i in range(4):
+            x, y, z = coordCombList[i][0], coordCombList[i][1], coordCombList[i][2]
+            if placeObject(activeField, combination[i], x, y, z):
+                lastFourFieldStates.append(copy.deepcopy(activeField))
+                if i == 3:
+                    for fsi, fieldState in enumerate(lastFourFieldStates):
+                        print(f"FIELD STATE {fsi}:")
+                        printObj(fieldState)
+                        
+                        if fsi > 0:
+                            print("\n")
+                            print("CORRESPONDING OBJECT:")
+                            printObj(combination[fsi-1])
+                    success = True
+                    break
+                continue
+            else:
+                break
+
+        if success:
+            break
+
+    if success:
+        break
+
+    if itercount % 1000 == 0:
+        print(f"Still computing on combination: {itercount}")
+    itercount += 1
+
+print(f"Final itercount: {itercount}")
+
+if success:
+    print("————————————")
+    print("————————————")
+    print("————————————")
+    print("SOLUTION FOUND")
+    print("FIELD:")
+    printObj(activeField)
+    print("————————————")
+    print("START COORDS FOR SOLUTION:")
+    print(coordCombList)
+    print("————————————")
+    print("OBJECTS:")
+    for obj in range(4):
+        print(f"\nObject {obj} —— Startpoint: [{coordCombList[obj][0]}, {coordCombList[obj][1]}, {coordCombList[obj][2]}]:")
+        printObj(combination[obj])
+else:
+    print("Found no solution!")
+    print("Found no solution!")
+    print("Found no solution!")
+    print("Found no solution!")
+    print("Found no solution!")
