@@ -99,8 +99,8 @@ greenSquiggly = [[[0, 1],
                   [0, 0]]]
 # fmt: on
 
-field = rightCornerLeftCenter
-blocks = [greenDoubleL, yellowDoubleL, redSimple, yellowTL]
+field = threeCorners
+blocks = [yellow4, greenL, redDoubleL, greenDoubleL]
 
 
 def printObj(object):
@@ -319,8 +319,4 @@ if success:
         print(f"\nObject {obj} —— Startpoint: [{coordCombList[obj][0]}, {coordCombList[obj][1]}, {coordCombList[obj][2]}]:")
         printObj(combination[obj])
 else:
-    print("Found no solution!")
-    print("Found no solution!")
-    print("Found no solution!")
-    print("Found no solution!")
-    print("Found no solution!")
+    print("You have entered something incorrectly!")
