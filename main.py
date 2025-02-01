@@ -3,13 +3,21 @@ import copy
 import time
 
 # fmt: off
-field = [[[0, 0, 0, 1], 
-          [1, 0, 0, 0], 
-          [0, 0, 0, 0]],
+rightCornerLeftCenter = [[[0, 0, 0, 1], 
+                          [1, 0, 0, 0], 
+                          [0, 0, 0, 0]],
           
-         [[0, 0, 0, 1], 
-          [1, 0, 0, 0], 
-          [0, 0, 0, 0]]]
+                         [[0, 0, 0, 1], 
+                          [1, 0, 0, 0], 
+                          [0, 0, 0, 0]]]
+
+threeCorners = [[[1, 0, 0, 1], 
+                 [0, 0, 0, 0], 
+                 [0, 0, 0, 1]],
+          
+                [[1, 0, 0, 1], 
+                 [0, 0, 0, 0], 
+                 [0, 0, 0, 1]]]
 
 yellowU = [[[1, 1, 1], 
             [1, 0, 1]]]
@@ -17,20 +25,42 @@ yellowU = [[[1, 1, 1],
 redSimple = [[[1, 1], 
               [1, 1]], 
 
-             [[1, 0], 
+             [[0, 1], 
               [0, 0]]]
 
-yellowTL = [[[1, 1, 1], 
-             [0, 1, 0]], 
+greenL = [[[1, 1, 1],
+           [0, 0, 1]]]
 
-            [[1, 0, 0], 
-             [0, 0, 0]]]
+blue3 = [[[1, 1],
+          [0, 1]]]
 
-yellowDoubleL = [[[1, 1, 1], 
-                  [1, 0, 0]], 
+red4 = [[[1, 1],
+         [0, 1]],
+                   
+        [[1, 0],
+         [0, 0]]]
 
-                 [[0, 0, 1], 
-                  [0, 0, 0]]]
+yellow4 = [[[1, 0],
+            [1, 1]],
+                   
+           [[1, 0],
+            [0, 0]]]
+
+yellowTL = [[[0, 1], 
+             [1, 1],
+             [0, 1]], 
+
+            [[0, 1], 
+             [0, 0],
+             [0, 0]]]
+
+yellowDoubleL = [[[1, 1], 
+                  [0, 1],
+                  [0, 1]], 
+
+                 [[0, 0], 
+                  [0, 0],
+                  [0, 1]]]
 
 blueDoubleL = [[[0, 1], 
                 [0, 1],
@@ -40,24 +70,37 @@ blueDoubleL = [[[0, 1],
                 [0, 0],
                 [1, 0]]]
 
-greenDoubleL = [[[1, 1], 
-                 [0, 1],
+greenDoubleL = [[[1, 1, 1], 
+                 [1, 0, 0]], 
+
+                [[0, 0, 0], 
+                 [1, 0, 0]]]
+
+redDoubleL = [[[1, 1, 1], 
+               [0, 0, 1]], 
+
+              [[1, 0, 0], 
+               [0, 0, 0]]]
+
+blueSquiggly = [[[1, 0], 
+                 [1, 1],
                  [0, 1]], 
 
                 [[1, 0], 
                  [0, 0],
                  [0, 0]]]
 
-blueSquiggly = [[[1, 0], 
-                 [1, 1],
-                 [0, 1]], 
+greenSquiggly = [[[0, 1], 
+                  [1, 1],
+                  [1, 0]], 
 
-               [[1, 0], 
-                [0, 0],
-                [0, 0]]]
+                 [[0, 1], 
+                  [0, 0],
+                  [0, 0]]]
 # fmt: on
 
-blocks = [blueDoubleL, greenDoubleL, yellowTL, blueSquiggly]
+field = rightCornerLeftCenter
+blocks = [greenDoubleL, yellowDoubleL, redSimple, yellowTL]
 
 
 def printObj(object):
@@ -172,8 +215,7 @@ def generatePossibleStartCoords(object):
                 if points > len(row) - pi:
                     break
 
-                if point == 0:
-                    possibleStartCoords.append([pi, ri, li])
+                possibleStartCoords.append([pi, ri, li])
 
     return possibleStartCoords
 
@@ -237,13 +279,12 @@ for combination in allCombinations:
                 lastFourFieldStates.append(copy.deepcopy(activeField))
                 if i == 3:
                     for fsi, fieldState in enumerate(lastFourFieldStates):
-                        print(f"FIELD STATE {fsi}:")
-                        printObj(fieldState)
-                        
                         if fsi > 0:
                             print("\n")
                             print("CORRESPONDING OBJECT:")
                             printObj(combination[fsi-1])
+                        print(f"FIELD STATE {fsi}:")
+                        printObj(fieldState)
                     success = True
                     break
                 continue
