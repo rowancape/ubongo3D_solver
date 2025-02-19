@@ -99,8 +99,10 @@ greenSquiggly = [[[0, 1],
                   [0, 0]]]
 # fmt: on
 
+start_time = time.time()
+
 field = threeCorners
-blocks = [yellow4, greenL, redDoubleL, greenDoubleL]
+blocks = [yellow4, greenL, redDoubleL, yellowTL]
 
 
 def printObj(object):
@@ -303,11 +305,20 @@ for combination in allCombinations:
 
 print(f"Final itercount: {itercount}")
 
+for layer in activeField:
+    for row in layer:
+        for point in row:
+            if point != 1:
+                print("You have entered something incorrectly!")
+                success = False
+
 if success:
+    end_time = time.time()
+    elapsed_time = end_time - start_time
     print("————————————")
     print("————————————")
     print("————————————")
-    print("SOLUTION FOUND")
+    print(f"SOLUTION FOUND IN {elapsed_time:.1f} SECONDS")
     print("FIELD:")
     printObj(activeField)
     print("————————————")
