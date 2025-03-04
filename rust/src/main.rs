@@ -1,5 +1,8 @@
 type Grid3D = Vec<Vec<Vec<u8>>>;
-type Rotations = Vec<Grid3D>;
+type AllRotations = Vec<Grid3D>;
+type RotationCombination = Vec<Grid3D>;
+type StartPoint = [usize; 3];
+type StartPoints = Vec<StartPoint>;
 enum Color {
     Red,
     Yellow,
@@ -9,7 +12,7 @@ enum Color {
 struct Block {
     block: Grid3D,
     color: Color,
-    unique_rotations: Rotations,
+    unique_rotations: AllRotations,
 }
 
 impl Block {
@@ -174,7 +177,7 @@ impl Block {
     }
     
     fn compute_unique_rotations(&mut self, field: &Grid3D) {
-        let mut unique_rotated_blocks: Rotations = Vec::new();
+        let mut unique_rotated_blocks: AllRotations = Vec::new();
     
         for i in 0..4 {
             for j in 0..4 {
@@ -199,18 +202,18 @@ impl Block {
 struct Solver {
     field: Grid3D,
     blocks: Vec<Block>,
-    rotational_combinations: Vec<Rotations>
+    rotational_combinations: Vec<RotationCombination>
 }
 
 impl Solver {
-    fn compute_rotational_combinations(&mut self, lists: Vec<Vec<Grid3D>>, prefix: Vec<Grid3D>) {
+    fn compute_rotational_combinations(&mut self, lists: Vec<AllRotations>, prefix: RotationCombination) {
         // Check if lists is empty
         if lists.is_empty() {
             // If it is then push the last state of prefix to result and return 
             self.rotational_combinations.push(prefix);
             return;
         }
-    
+
         // If not then pop the first list out and loop over the blocks in it
         let first = &lists[0];
         let rest = &lists[1..];
@@ -224,64 +227,67 @@ impl Solver {
             self.compute_rotational_combinations(rest.to_vec(), new_prefix);
         }
     }
-}
 
-
-fn compute_valid_start_coords(block: &Grid3D, field: &Grid3D) -> Vec<[usize; 3]> {
-    let mut initial_start_points: Vec<[usize; 3]> = Vec::new();
-
-    for layer in 0..field.len()-block.len()+1 {
-        for row in 0..field[0].len()-block[0].len()+1 {
-            for point in 0..field[0][0].len()-block[0][0].len()+1 {
-                initial_start_points.push([layer, row, point]);
-            }
-        }
-    }
-
-    let mut start_points: Vec<[usize; 3]> = Vec::new();
+    fn compute_valid_start_coords(&self, block: &Grid3D) -> StartPoints {
+        let mut initial_start_points: StartPoints = Vec::new();
+        let field = &self.field;
     
-    for sp in initial_start_points {
-        let mut is_valid = true;
-
-        for (li, layer) in block.iter().enumerate() {
-            for (ri, row) in layer.iter().enumerate() {
-                for (pi, point) in row.iter().enumerate() {
-                    if field[sp[0]+li][sp[1]+ri][sp[2]+pi] + point == 2 {
-                        is_valid = false;
-                    }
+        for layer in 0..field.len()-block.len()+1 {
+            for row in 0..field[0].len()-block[0].len()+1 {
+                for point in 0..field[0][0].len()-block[0][0].len()+1 {
+                    initial_start_points.push([layer, row, point]);
                 }
             }
         }
-
-        if is_valid {
-            start_points.push(sp);
+    
+        let mut start_points: StartPoints = Vec::new();
+        
+        for sp in initial_start_points {
+            let mut is_valid = true;
+    
+            for (li, layer) in block.iter().enumerate() {
+                for (ri, row) in layer.iter().enumerate() {
+                    for (pi, point) in row.iter().enumerate() {
+                        if field[sp[0]+li][sp[1]+ri][sp[2]+pi] + point == 2 {
+                            is_valid = false;
+                        }
+                    }
+                }
+            }
+    
+            if is_valid {
+                start_points.push(sp);
+            }
+        }
+    
+        start_points
+    }
+    
+    fn compute_start_point_combinations(&self, lists: Vec<StartPoints>, prefix: StartPoints, result: &mut Vec<Vec<[usize; 3]>>) {
+        // Check if lists is empty
+        if lists.is_empty() {
+            // If it is then push the last state of prefix to result and return 
+            result.push(prefix);
+            return;
+        }
+    
+        // If not then pop the first list out and loop over the blocks in it
+        let first = &lists[0];
+        let rest = &lists[1..];
+    
+        for block in first {
+            // In the loop create a new prefix variable and push the current block to it
+            let mut new_prefix = prefix.clone();
+            new_prefix.push(block.clone());
+    
+            // Then recursively call itself with the new prefix and all but the first element in lists.
+            self.compute_start_point_combinations(rest.to_vec(), new_prefix, result);
         }
     }
-
-    start_points
 }
 
-fn compute_start_point_combinations(lists: Vec<Vec<[usize; 3]>>, prefix: Vec<[usize; 3]>, result: &mut Vec<Vec<[usize; 3]>>) {
-    // Check if lists is empty
-    if lists.is_empty() {
-        // If it is then push the last state of prefix to result and return 
-        result.push(prefix);
-        return;
-    }
 
-    // If not then pop the first list out and loop over the blocks in it
-    let first = &lists[0];
-    let rest = &lists[1..];
 
-    for block in first {
-        // In the loop create a new prefix variable and push the current block to it
-        let mut new_prefix = prefix.clone();
-        new_prefix.push(block.clone());
-
-        // Then recursively call itself with the new prefix and all but the first element in lists.
-        compute_start_point_combinations(rest.to_vec(), new_prefix, result);
-    }
-}
 
 fn main() {
     let field: Grid3D = vec![vec![
@@ -330,24 +336,24 @@ fn main() {
         block.compute_unique_rotations(&solver.field);
     }
 
-    let unique_rotations_all_blocks: Vec<Rotations> = 
+    let unique_rotations_all_blocks: Vec<AllRotations> = 
         solver.blocks.iter().map(|block| block.unique_rotations).collect();
 
     solver.compute_rotational_combinations(unique_rotations_all_blocks, Vec::new());
 
-    for combination in rotational_combinations {
+    for combination in solver.rotational_combinations {
 
         let mut is_valid = true;
 
-        let mut all_start_points: Vec<Vec<[usize; 3]>> = Vec::new();
+        let mut all_start_points: Vec<StartPoints> = Vec::new();
 
         for block in &combination {
-            let start_points = compute_valid_start_coords(&block, &field);
+            let start_points = solver.compute_valid_start_coords(&block);
             all_start_points.push(start_points);
         }
 
         let mut start_point_combinations: Vec<Vec<[usize; 3]>> = Vec::new();
-        compute_start_point_combinations(all_start_points, Vec::new(), &mut start_point_combinations);
+        solver.compute_start_point_combinations(all_start_points, Vec::new(), &mut start_point_combinations);
 
         for spc in start_point_combinations {
             let mut step_field = vec![field.clone()];
