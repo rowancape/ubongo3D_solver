@@ -1,4 +1,16 @@
+use std::collections::HashSet;
+use blake3::Hasher;
+use itertools::Itertools;
+use std::time::Instant;
+
 type Grid3D = Vec<Vec<Vec<u8>>>;
+type PreviousRotationBlocks = Vec<Grid3D>;
+type PreviousRotationHashes = HashSet<[u8; 32]>;
+type Hash = [u8; 32];
+type BlockCombination = Vec<Grid3D>;
+type Coordinate = [usize; 3];
+
+#[derive(PartialEq)]
 enum Color {
     Red,
     Yellow,
@@ -8,303 +20,589 @@ enum Color {
 struct Block {
     block: Grid3D,
     color: Color,
+    past_rotations: PreviousRotationBlocks,
+    rotation_hashes: PreviousRotationHashes,
+    rot_amount: [u8; 3]
 }
 
-fn print_object(object: &Grid3D) {
-    for (i, layer) in object.iter().enumerate() {
-        if i != 0 {
-            println!("—————————");
+impl Block {
+    // Constructs a new block
+    fn new(block: Grid3D, color: Color) -> Block {
+        
+        let mut block = Block {
+            block,
+            color,
+            past_rotations: Vec::new(),
+            rotation_hashes: HashSet::new(),
+            rot_amount: [0, 0, 0],
+        };
+
+        block.past_rotations.push(block.block.clone());
+        block.rotation_hashes.insert(block.hash_current_rotation());
+
+        block
+    }
+
+    // Prints the block to std_out with a specified amount of empty lines at the top and bottom
+    fn print(&self, spacing: usize) {
+        for _ in 0..spacing {
+            println!()
         }
-        for row in layer {
-            println!("{:?}", row);
-        }
-    }
-}
-
-fn rotate_x(object: &Grid3D, rotations: usize) -> Grid3D {
-    let mut result = object.clone();
-    let r = rotations % 4;
-    for _ in 0..r {
-        let layers = result.len();
-        let rows = result[0].len();
-        let points = result[0][0].len();
-        let new_obj: Grid3D = (0..rows)
-            .map(|i| {
-                (0..layers)
-                    .map(|j| {
-                        (0..points)
-                            .map(|k| result[j][rows - 1 - i][k])
-                            .collect::<Vec<u8>>()
-                    })
-                    .collect::<Vec<Vec<u8>>>()
-            })
-            .collect();
-        result = new_obj;
-    }
-    result
-}
-
-fn rotate_y(object: &Grid3D, rotations: usize) -> Grid3D {
-    let mut result = object.clone();
-    let r = rotations % 4;
-    for _ in 0..r {
-        let layers = result.len();
-        let rows = result[0].len();
-        let points = result[0][0].len();
-        let new_obj: Grid3D = (0..points)
-            .map(|i| {
-                (0..rows)
-                    .map(|j| {
-                        (0..layers)
-                            .map(|k| result[k][j][points - 1 - i])
-                            .collect::<Vec<u8>>()
-                    })
-                    .collect::<Vec<Vec<u8>>>()
-            })
-            .collect();
-        result = new_obj;
-    }
-    result
-}
-
-fn rotate_z(object: &Grid3D, rotations: usize) -> Grid3D {
-    let mut result = object.clone();
-    let r = rotations % 4;
-    for _ in 0..r {
-        let layers = result.len();
-        let rows = result[0].len();
-        let points = result[0][0].len();
-        let new_obj: Grid3D = (0..layers)
-            .map(|i| {
-                (0..points)
-                    .map(|j| {
-                        (0..rows)
-                            .map(|k| result[i][rows - 1 - k][j])
-                            .collect::<Vec<u8>>()
-                    })
-                    .collect::<Vec<Vec<u8>>>()
-            })
-            .collect();
-        result = new_obj;
-    }
-    result
-}
-
-fn compute_unique_rotations(block: &Grid3D, field: &Grid3D) -> Vec<Grid3D> {
-    let mut unique_rotated_blocks: Vec<Grid3D> = Vec::new();
-
-    for i in 0..4 {
-        for j in 0..4 {
-            for k in 0..4 {
-                let rotated_block: Grid3D = rotate_x(&rotate_y(&rotate_z(&block, i), j), k);
-                if unique_rotated_blocks.contains(&rotated_block) || rotated_block.len() > field.len() {
-                    continue;
-                }
-                unique_rotated_blocks.push(rotated_block);
+        
+        for layer in &self.block {
+            println!("———————————");
+            for row in layer {
+                println!("{row:?}");
             }
         }
-    }
-
-    if unique_rotated_blocks.len() == 0 {
-        panic!("At least one of the blocks could not be placed in the field in any rotational configuration!")
-    }
-
-    unique_rotated_blocks
-}
-
-fn compute_rotational_combinations(lists: Vec<Vec<Grid3D>>, prefix: Vec<Grid3D>, result: &mut Vec<Vec<Grid3D>>) {
-    // Check if lists is empty
-    if lists.is_empty() {
-        // If it is then push the last state of prefix to result and return 
-        result.push(prefix);
-        return;
-    }
-
-    // If not then pop the first list out and loop over the blocks in it
-    let first = &lists[0];
-    let rest = &lists[1..];
-
-    for block in first {
-        // In the loop create a new prefix variable and push the current block to it
-        let mut new_prefix = prefix.clone();
-        new_prefix.push(block.clone());
-
-        // Then recursively call itself with the new prefix and all but the first element in lists.
-        compute_rotational_combinations(rest.to_vec(), new_prefix, result);
-    }
-}
-
-fn compute_valid_start_coords(block: &Grid3D, field: &Grid3D) -> Vec<[usize; 3]> {
-    let mut initial_start_points: Vec<[usize; 3]> = Vec::new();
-
-    for layer in 0..field.len()-block.len()+1 {
-        for row in 0..field[0].len()-block[0].len()+1 {
-            for point in 0..field[0][0].len()-block[0][0].len()+1 {
-                initial_start_points.push([layer, row, point]);
-            }
-        }
-    }
-
-    let mut start_points: Vec<[usize; 3]> = Vec::new();
     
-    for sp in initial_start_points {
-        let mut is_valid = true;
+        for _ in 0..spacing {
+            println!()
+        }
+    }
+
+    // Rotates the block on the x axis amount * 90 degrees
+    fn rotate_x(&mut self, amount: usize) {
+        let mut new_block: Grid3D = Vec::new();
+    
+        let layers = self.block.len();
+        let rows = self.block[0].len();
+
+        if amount == 1 {
+            for i in (0..rows).rev() {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in 0..layers {
+                    new_layer.push(self.block[j][i].clone());
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        if amount == 2 {
+            for i in (0..layers).rev() {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in (0..rows).rev() {
+                    new_layer.push(self.block[i][j].clone());
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        if amount == 3 {
+            for i in 0..rows {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in (0..layers).rev() {
+                    new_layer.push(self.block[j][i].clone());
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        self.block = new_block;
+    }
+    
+    // Rotates the block on the y axis amount * 90 degrees
+    fn rotate_y(&mut self, amount: usize) {
+        let mut new_block: Grid3D = Vec::new();
+    
+        let layers = self.block.len();
+        let rows = self.block[0].len();
+        let points = self.block[0][0].len();
+
+        if amount == 1 {
+            for i in (0..points).rev() {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in 0..rows {
+                    let mut new_row: Vec<u8> = Vec::new();
+                    for k in 0..layers {
+                        new_row.push(self.block[k][j][i].clone());
+                    }
+                    new_layer.push(new_row);
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        if amount == 2 {
+            for i in (0..layers).rev() {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in 0..rows {
+                    new_layer.push(self.block[i][j].clone().into_iter().rev().collect());
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        if amount == 3 {
+            for i in 0..points {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in 0..rows {
+                    let mut new_row: Vec<u8> = Vec::new();
+                    for k in (0..layers).rev() {
+                        new_row.push(self.block[k][j][i].clone());
+                    }
+                    new_layer.push(new_row);
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        self.block = new_block;
+    }
+    
+    // Rotates the block on the z axis amount * 90 degrees
+    fn rotate_z(&mut self, amount: usize) {
+        let mut new_block: Grid3D = Vec::new();
+        
+        let layers = self.block.len();
+        let rows = self.block[0].len();
+        let points = self.block[0][0].len();
+
+        if amount == 1 {
+            for i in 0..layers {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in 0..points {
+                    let mut new_row: Vec<u8> = Vec::new();
+                    for k in (0..rows).rev() {
+                        new_row.push(self.block[i][k][j].clone());
+                    }
+                    new_layer.push(new_row);
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        if amount == 2 {
+            for i in 0..layers {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in (0..rows).rev() {
+                    new_layer.push(self.block[i][j].clone().into_iter().rev().collect());
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        if amount == 3 {
+            for i in 0..layers {
+                let mut new_layer: Vec<Vec<u8>> = Vec::new();
+                for j in (0..points).rev() {
+                    let mut new_row: Vec<u8> = Vec::new();
+                    for k in 0..rows {
+                        new_row.push(self.block[i][k][j].clone());
+                    }
+                    new_layer.push(new_row);
+                }
+                new_block.push(new_layer);
+            }
+        }
+
+        self.block = new_block;
+    }
+
+    fn rotate_with_index(&mut self, i: usize) {
+        if i == 0 {
+            self.rotate_x(1);
+        }
+        else if i == 1 {
+            self.rotate_y(1);
+        }
+        else if i == 2 {
+            self.rotate_z(1);
+        }
+        else {
+            panic!("Incorrect index entered into rotate_with_index!")
+        }
+    }
+
+    fn hash_current_rotation(&self) -> Hash {
+        let mut hasher = Hasher::new();
+
+        for layer in &self.block {
+            for row in layer {
+                hasher.update(&row);
+            }
+        }
+
+        hasher.finalize().into()
+    }
+}
+
+struct Solver {
+    field: Grid3D,
+    blocks: Vec<Block>,
+    rotating_block_num: u8,
+    new_rotational_combinations: Vec<BlockCombination>,
+}
+
+impl Solver {
+    fn new(field: Grid3D, blocks: Vec<Block>) -> Solver {
+        // Makes the "new_rotational_combinations" vector a single vector containing the
+        // starting, unrotated states of each block
+        let new_rotational_combinations: Vec<BlockCombination> = 
+            vec![blocks.iter().map(|b| b.block.clone()).collect()];
+
+        Solver {
+            field,
+            blocks,
+            rotating_block_num: 1,
+            new_rotational_combinations,
+        }
+    }
+    
+    // If a single start point makes the block overlap with the field returns true, otherwise false.
+    fn does_candidate_overlap_field(&self, candidate: Coordinate, block: &Grid3D) -> bool {
+        let x = candidate[0];
+        let y = candidate[1];
+        let z = candidate[2];
 
         for (li, layer) in block.iter().enumerate() {
             for (ri, row) in layer.iter().enumerate() {
                 for (pi, point) in row.iter().enumerate() {
-                    if field[sp[0]+li][sp[1]+ri][sp[2]+pi] + point == 2 {
-                        is_valid = false;
+                    if self.field[z+li][y+ri][x+pi] + point > 1 {
+                        return true;
                     }
                 }
             }
         }
 
-        if is_valid {
-            start_points.push(sp);
+        false
+    }
+
+    // Validates the intial start coord candidates by checking if they cause the block to overlap with field.
+    fn validate_candidate_coords(&self, candidates: Vec<Coordinate>, block: &Grid3D) -> Vec<Coordinate> {
+        let mut valid_coords: Vec<Coordinate> = Vec::new();
+
+        for candidate in candidates {
+            if !self.does_candidate_overlap_field(candidate, block) {
+                valid_coords.push(candidate);
+            }
+        }
+
+        valid_coords
+    }
+
+    // Finds the initial start coord candidates for a single block
+    fn find_start_coord_candidates(&self, block: &Grid3D) -> Vec<Coordinate> {
+        let mut single_block_coords: Vec<Coordinate> = Vec::new();
+
+        let field_layers = self.field.len();
+        let field_rows = self.field[0].len();
+        let field_points = self.field[0][0].len();
+
+        let block_layers = block.len();
+        let block_rows = block[0].len();
+        let block_points = block[0][0].len();
+            
+        for z in 0..field_layers {
+            // If block can't fit in the z axis, break.
+            if field_layers - z < block_layers {
+                break;
+            }
+
+            for y in 0..field_rows {
+                // If block can't fit in the y axis, break.
+                if field_rows - y < block_rows {
+                    break;
+                }
+
+                for x in 0..field_points {
+                    // If block can't fit in the x axis, break.
+                    if field_points - x < block_points {
+                        break;
+                    }
+                    // If block fits at start coordinate [x, y, z] in all axis then save that coord.
+                    single_block_coords.push([x, y, z]);
+                }
+            }
+        }
+
+        single_block_coords
+    }
+
+    // Gets all the valid start coords for each object and returns them in a Vec<Vec<Coordinate>>>
+    // Return value is a vector containing "block number" of vectors, each with some amount of start coords.
+    // start_coords[i] are the start coords corresponding to the passed in combo[i] block
+    fn find_valid_start_coords(&self, combo: &BlockCombination) -> Vec<Vec<Coordinate>> {
+        // Possible start coordinates for each block in a combination of blocks.
+        // If there are four blocks in a combination this would be vector of four vectors,
+        // each containing some number of possible start coordinates for the corresponding block.
+        let mut start_coords_each_block: Vec<Vec<Coordinate>> = Vec::new();
+
+        for block in combo {
+            let candidates = self.find_start_coord_candidates(&block);
+            let valid_start_coords = self.validate_candidate_coords(candidates, &block);
+
+            start_coords_each_block.push(valid_start_coords);
+        }
+
+        start_coords_each_block
+    }
+
+    fn is_solve_success(&self, field: &mut Grid3D, blocks: &Vec<Grid3D>, sps: &Vec<[usize; 3]>) -> bool {
+        for (spi, sp) in sps.iter().enumerate() {
+            let x = sp[0];
+            let y = sp[1];
+            let z = sp[2];
+    
+            for (li, layer) in blocks[spi].iter().enumerate() {
+                for (ri, row) in layer.iter().enumerate() {
+                    for (pi, point) in row.iter().enumerate() {
+                        if field[li+z][ri+y][pi+x] + point > 1 {
+                            return false;
+                        } 
+                        else {
+                            field[li+z][ri+y][pi+x] += point;
+                        }
+                    }
+                }
+            }
+        }
+        
+        true
+    }
+
+    fn which_block_to_rotate_next(&self) -> Option<usize> {
+        for (i, block) in self.blocks.iter().enumerate() {
+            if block.rot_amount == [3, 3, 3] {
+                continue;
+            }
+            else {
+                return Some(i);
+            }
+        } 
+
+        None
+    }
+
+    fn rotate_block(&mut self, block_index: &usize) {
+        let block = &mut self.blocks[*block_index];
+
+        for i in 0..3 {
+            if block.rot_amount[i] == 3 {
+                block.rotate_with_index(i);
+                block.rot_amount[i] = 0;
+                continue;
+            }
+            else {
+                block.rotate_with_index(i);
+                block.rot_amount[i] += 1;
+                break;
+            }
         }
     }
 
-    start_points
-}
-
-fn compute_start_point_combinations(lists: Vec<Vec<[usize; 3]>>, prefix: Vec<[usize; 3]>, result: &mut Vec<Vec<[usize; 3]>>) {
-    // Check if lists is empty
-    if lists.is_empty() {
-        // If it is then push the last state of prefix to result and return 
-        result.push(prefix);
-        return;
+    fn is_current_rotation_unique(&self, block_index: &usize) -> bool {
+        !self.blocks[*block_index].past_rotations.contains(&self.blocks[*block_index].block)
     }
 
-    // If not then pop the first list out and loop over the blocks in it
-    let first = &lists[0];
-    let rest = &lists[1..];
+    fn get_combined_blocks(&self, b: usize) -> Vec<BlockCombination> {
+        let mut result: Vec<BlockCombination> = Vec::new();
 
-    for block in first {
-        // In the loop create a new prefix variable and push the current block to it
-        let mut new_prefix = prefix.clone();
-        new_prefix.push(block.clone());
+        for (i, block) in self.blocks.iter().enumerate() {
+            if i == b {
+                result.push(vec![block.block.clone()]);
+            } 
+            else {
+                result.push(block.past_rotations.clone());
+            }
+        }
 
-        // Then recursively call itself with the new prefix and all but the first element in lists.
-        compute_start_point_combinations(rest.to_vec(), new_prefix, result);
+        result
     }
+
+    fn compute_new_rotation(&mut self) {
+        if let Some(b) = self.which_block_to_rotate_next() {
+            
+            loop {
+                self.rotate_block(&b);
+                if self.blocks[b].rot_amount == [3, 3, 3] {
+                    break;
+                }
+                else if self.is_current_rotation_unique(&b) {
+                    let unique_block = self.blocks[b].block.clone();
+                    self.blocks[b].past_rotations.push(unique_block);
+                    break;
+                }
+            }
+
+            let temp = self.get_combined_blocks(b);
+            let new_rotational_combinations: Vec<BlockCombination> = temp.into_iter().multi_cartesian_product().collect();
+            self.new_rotational_combinations = new_rotational_combinations;
+        }
+    }
+
+    fn solve(&mut self) -> Option<(Vec<Grid3D>, Vec<Coordinate>)> {
+        while self.blocks.last().unwrap().rot_amount != [3, 3, 3]  {
+            for block_combo in &self.new_rotational_combinations {
+    
+                let start_coords_each_block = self.find_valid_start_coords(block_combo);
+    
+                let start_combos_iterator = start_coords_each_block.into_iter().multi_cartesian_product();
+    
+                for start_combo in start_combos_iterator {
+    
+                    let mut active_field = self.field.clone();
+    
+                    if self.is_solve_success(&mut active_field, block_combo, &start_combo) {
+                        return Some((block_combo.clone(), start_combo));
+                    }
+                }
+            }
+
+            self.compute_new_rotation();
+        }
+
+        None
+    }
+
+
 }
 
 fn main() {
-    let field: Grid3D = vec![vec![
-            vec![1, 0, 0, 1], 
-            vec![0, 0, 0, 0], 
-            vec![0, 0, 0, 1]],
-        vec![
-            vec![1, 0, 0, 1], 
-            vec![0, 0, 0, 0], 
-            vec![0, 0, 0, 1]],
-    ];
 
-    let block1 = Block {
-        block: vec![vec![
+    let start_time = Instant::now();
+
+    let field: Grid3D = vec![vec![
+                vec![1, 0, 0, 1],
+                vec![0, 0, 0, 0],
+                vec![0, 0, 0, 1]],
+            vec![
+                vec![1, 0, 0, 1], 
+                vec![0, 0, 0, 0], 
+                vec![0, 0, 0, 1]]];
+
+
+    let block1 = Block::new(
+        vec![vec![
             vec![1, 1, 1], 
             vec![0, 0, 1]]],
-        color: Color::Green,
-    };
+        Color::Green,
+    );
 
-    let block2 = Block {
-        block: vec![
-            vec![vec![1, 1, 1], vec![0, 0, 1]],
-            vec![vec![0, 0, 0], vec![0, 0, 1]],
-        ],
-        color: Color::Blue,
-    };
+    let block2 = Block::new(
+        vec![vec![
+            vec![1, 1, 1], 
+            vec![0, 1, 0]],
+            vec![
+            vec![1, 0, 0], 
+            vec![0, 0, 0]]],
+        Color::Yellow,
+    );
 
-    let block3 = Block {
-        block: vec![vec![vec![1, 1], vec![1, 1]], vec![vec![1, 0], vec![0, 0]]],
-        color: Color::Red,
-    };
+    let block3 = Block::new(
+        vec![vec![
+            vec![1, 1, 0], 
+            vec![0, 1, 1]],
+            vec![
+            vec![1, 0, 0], 
+            vec![0, 0, 0]]],
+        Color::Green,
+    );
 
-    let block4 = Block {
-        block: vec![vec![vec![1, 1], vec![1, 0]], vec![vec![0, 0], vec![1, 0]]],
-        color: Color::Red,
-    };
+    let block4 = Block::new(
+        vec![vec![
+            vec![1, 0], 
+            vec![1, 1]], 
+        vec![
+            vec![1, 0], 
+            vec![0, 0]]],
+        Color::Yellow,
+    );
 
-    let blocks = [&block1.block, &block2.block, &block3.block, &block4.block];
+    let mut solver = Solver::new(
+        field,
+        vec![block1, block2, block3, block4],
+    );
 
-    let mut unique_rotations_all_blocks: Vec<Vec<Grid3D>> = Vec::new();
+    fn print_solution(field: Vec<Vec<Vec<&str>>>) {
+        
+        for layer in field {
 
-    for block in blocks {
-        let unique_rotations: Vec<Grid3D> = compute_unique_rotations(block, &field);
-        unique_rotations_all_blocks.push(unique_rotations);
+            println!();
+            for row in layer {
+                println!();
+                for point in row {
+                    print!("{point}");
+                }
+            }
+        }
     }
 
-    let mut rotational_combinations: Vec<Vec<Grid3D>> = Vec::new();
-    compute_rotational_combinations(unique_rotations_all_blocks, Vec::new(), &mut rotational_combinations);
-
-    for combination in rotational_combinations {
-
-        let mut all_start_points: Vec<Vec<[usize; 3]>> = Vec::new();
-
-        for block in &combination {
-            let start_points = compute_valid_start_coords(&block, &field);
-            all_start_points.push(start_points);
+    fn produce_solution_field
+    (
+        field: &mut Vec<Vec<Vec<&str>>>, 
+        block: &Grid3D, 
+        coord: &Coordinate, 
+        color: &Color,
+        prev_colors: &mut Vec<&str>
+    ) {
+        let mut c = "";
+        
+        match color {
+            Color::Blue => { 
+                if prev_colors.contains(&"🟦") { c = "🔵" }
+                else { c = "🟦" } 
+            },
+            Color::Red => {
+                if prev_colors.contains(&"🟥") { c = "🔴" }
+                else { c = "🟥" } 
+            },
+            Color::Yellow => {
+                if prev_colors.contains(&"🟨") { c = "🟡" }
+                else { c = "🟨" } 
+            },
+            Color::Green => {
+                if prev_colors.contains(&"🟩") { c = "🟢" }
+                else { c = "🟩" }
+            }
         }
 
-        let mut start_point_combinations: Vec<Vec<[usize; 3]>> = Vec::new();
-        compute_start_point_combinations(all_start_points, Vec::new(), &mut start_point_combinations);
+        let x = coord[0];
+        let y = coord[1];
+        let z = coord[2];
+        
+        prev_colors.push(c);
 
-        for spc in start_point_combinations {
-            let mut step_field = vec![field.clone()];
-            let mut active_field = field.clone();
-            let mut is_valid = true;
-            for (bi, block) in combination.iter().enumerate() {
-                for (li, layer) in block.iter().enumerate() {
-                    for (ri, row) in layer.iter().enumerate() {
-                        for (pi, point) in row.iter().enumerate() {
-                            if active_field[spc[bi][0]+li][spc[bi][1]+ri][spc[bi][2]+pi] + point == 2 {
-                                is_valid = false;
-                                break;
-                            }
-                            active_field[spc[bi][0]+li][spc[bi][1]+ri][spc[bi][2]+pi] += point;
-                        }
-                        if !is_valid { break; }
-                    }
-                    if !is_valid { break; }
-                }
-                if !is_valid { break; }
-                let previous_field = step_field.last().unwrap();
-                let mut modified_field = active_field.clone();
-                for i in 0..modified_field.len() {
-                    for j in 0..modified_field[0].len() {
-                        for k in 0..modified_field[0][0].len() {
-                            // If a cell is newly activated (was 0 before and now is 1)
-                            if previous_field[i][j][k] == 0 && modified_field[i][j][k] == 1 {
-                                modified_field[i][j][k] = 1 + bi as u8;
-                            }
-                        }
+        for (li, layer) in block.iter().enumerate() {
+            for (ri, row) in layer.iter().enumerate() {
+                for (pi, point) in row.iter().enumerate() {
+                    if *point == 1 {
+                        field[z+li][y+ri][x+pi] = c;
                     }
                 }
-                step_field.push(modified_field);
             }
-            if is_valid {
-                println!("FOUND SOLUTION!");
-                print_object(&step_field[0]);
-                println!();
-                println!("PLACED OBJECT1 AT {:?}", spc[0]);
-                print_object(&combination[0]);
-                println!();
-                print_object(&step_field[1]);
-                println!();
-                println!("PLACED OBJECT2 AT {:?}", spc[1]);
-                print_object(&combination[1]);
-                println!();
-                print_object(&step_field[2]);
-                println!();
-                println!("PLACED OBJECT3 AT {:?}", spc[2]);
-                print_object(&combination[2]);
-                println!();
-                print_object(&step_field[3]);
-                println!();
-                println!("PLACED OBJECT4 AT {:?}", spc[3]);
-                print_object(&combination[3]);
+        }
+    }
+
+    match solver.solve() {
+        Some(solution) => {
+            let blocks: BlockCombination = solution.0;
+            let coords: Vec<Coordinate> = solution.1;
+
+            let mut field: Vec<Vec<Vec<&str>>> = solver.field
+                .iter()
+                .map(|v| 
+                    v.iter()
+                     .map(|inner| inner.iter().map(|_| "⬛").collect())
+                     .collect()
+                )
+                .collect();
+
+            let mut prev_colors: Vec<&str> = Vec::new();
+
+            for i in 0..blocks.len() {
+                let block_color = &solver.blocks[i].color;
+                produce_solution_field(&mut field, &blocks[i], &coords[i], block_color, &mut prev_colors);
             }
+
+            print_solution(field);
+
+            println!();
+            println!();
+            println!("Took {:?} to compute.", start_time.elapsed())
+        }
+        None => {
+            println!("Yeah this ain't really no surprise but this shit ain't workin'.")
         }
     }
 }
